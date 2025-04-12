@@ -1,0 +1,14 @@
+learning_rate: 0.0001
+threshold: 0.5
+fs: 500
+output_length: 5000
+batch_size: 4
+max_epochs: 50
+
+data:
+  train_signals: "train_signals.npy"
+  train_masks: "train_masks.npy"
+  val_signals: "val_signals.npy"
+  val_masks: "val_masks.npy"
+  test_signals: "test_signals.npy"
+  test_masks: "test_masks.npy"
