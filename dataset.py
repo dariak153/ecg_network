@@ -1,92 +1,147 @@
+import os
 import wfdb
 import numpy as np
-import os
+import matplotlib.pyplot as plt
 
-class ECG:
-    def __init__(self, base_path):
-        self.base_path = base_path
-        self.leads = ["i", "ii", "iii", "avr", "avl", "avf", "v1", "v2", "v3", "v4", "v5", "v6"]
+leads = ["i", "ii", "iii", "avr", "avl", "avf",
+         "v1", "v2", "v3", "v4", "v5", "v6"]
 
-    def load_record(self, record_id):
-        rec = wfdb.rdrecord(f"{self.base_path}/{record_id}")
-        return rec.p_signal, rec.fs
+def read_record(data_dir, rec_id, lead):
+    path = os.path.join(data_dir, str(rec_id))
+    record = wfdb.rdrecord(path)
+    signal, fs = record.p_signal, record.fs
 
-    def load_annotations(self, record_id, lead, fs):
-        try:
-            ann = wfdb.rdann(f"{self.base_path}/{record_id}", extension=lead.lower())
-        except Exception as e:
-            print(f"Error loading record {record_id}: {e}")
-            return []
-        anns = []
-        for i, sym in enumerate(ann.symbol):
-            if sym in ["p", "N", "t"]:
-                peak = ann.sample[i]
-                onset = ann.sample[i - 1] if i > 0 and ann.symbol[i - 1] == "(" else peak
-                offset = ann.sample[i + 1] if i < len(ann.symbol) - 1 and ann.symbol[i + 1] == ")" else peak
-                duration = (offset - onset) * 1000 / fs
-                anns.append({
-                    "label": sym,
-                    "peak": peak,
-                    "onset": onset,
-                    "offset": offset,
-                    "duration": duration
-                })
-        return anns
+    ann = wfdb.rdann(path, extension=lead.lower())
+    ann_list = []
+    for i, sym in enumerate(ann.symbol):
+        if sym in ["p", "N", "t"]:
+            peak = ann.sample[i]
+            start = ann.sample[i - 1] if i > 0 and ann.symbol[i - 1] == "(" else peak
+            end = ann.sample[i + 1] if i < len(ann.symbol) - 1 and ann.symbol[i + 1] == ")" else peak
+            duration = (end - start) * 1000 / fs
+            ann_list.append({
+                "label": sym,
+                "peak": peak,
+                "start": start,
+                "end": end,
+                "duration": duration
+            })
+    return signal, fs, ann_list
 
-    def mask_create(self, length, anns):
-        mask = np.zeros(length, dtype=np.uint8)
-        for ann in anns:
-            if ann["label"] == "N":
-                start = max(0, ann["onset"])
-                end = min(length - 1, ann["offset"])
-                mask[start:end + 1] = 1
-        return mask
 
-def process_record(ecg, record_id, lead):
-    try:
-        signal, fs = ecg.load_record(record_id)
-        if lead.lower() not in ecg.leads:
-            raise ValueError(f"Lead {lead} not found in record {record_id}.")
-        idx = ecg.leads.index(lead.lower())
-        raw_signal = signal[:, idx]
-        anns = ecg.load_annotations(record_id, lead, fs)
-        mask = ecg.mask_create(len(raw_signal), anns)
-        return raw_signal, mask, anns, fs
-    except Exception as e:
-        print(f"Error processing record {record_id} with lead {lead}: {e}")
-        return None, None, None, None
+def process_record(data_dir, rec_id, lead):
 
-def save_data(data_dict, folder, file_name):
-    os.makedirs(folder, exist_ok=True)
-    file_path = os.path.join(folder, file_name)
-    np.save(file_path, data_dict)
-    print(f"Saved data to {file_path}")
+    full_signal, fs, ann_list = read_record(data_dir, rec_id, lead)
+    lead_idx = leads.index(lead.lower())
+    sig = full_signal[:, lead_idx]
 
-def main():
-    base_path = "datasets_physionet/data"
-    ecg = ECG(base_path)
-    
+    mask = np.zeros(len(sig), dtype=np.uint8)
+    for ann in ann_list:
+        if ann["label"] == "N":  
+            s = max(0, ann["start"])
+            e = min(len(sig) - 1, ann["end"])
+            mask[s:e+1] = 1
+    return sig, mask, ann_list, fs
+
+
+def plot_record(signal, mask, ann_list, fs):
+   
+    for ann in ann_list:
+        if ann["label"] == "N":
+            print(f"Onset: {ann['start']/fs:.3f}s, Peak: {ann['peak']/fs:.3f}s, "
+                  f"End: {ann['end']/fs:.3f}s, Duration: {ann['duration']:.2f}ms")
+
+
+    t = np.arange(len(signal)) / fs
+
  
-    record_ids = list(range(1, 200))
- 
-    path = {
-        "train": {"lead": "ii", "folder": "masks/train", "signals_folder": "signals/train"},
-        "validation": {"lead": "iii", "folder": "masks/validation", "signals_folder": "signals/validation"},
-        "test": {"lead": "i", "folder": "masks/test", "signals_folder": "signals/test"}
-    }
-    
-    for subset_name, config in path.items():
-        print(f"\nProcessing subset: {subset_name} with lead {config['lead']}")
-        masks = {}
-        signals = {}
-        for rec_id in record_ids:
-            raw_signal, mask, anns, fs = process_record(ecg, rec_id, config["lead"])
-            if raw_signal is not None:
-                signals[rec_id] = raw_signal
-                masks[rec_id] = mask
-        save_data(masks, config["folder"], f"masks_{subset_name}.npy")
-        save_data(signals, config["signals_folder"], f"signals_{subset_name}.npy")
+    plt.figure(figsize=(12, 4))
+    plt.plot(t, signal, label="ECG Signal")
+    colors = {"QRS": "red", "P": "blue", "T": "green"}
+    for ann in ann_list:
+        if ann["label"] == "N":
+            wave = "QRS"
+        elif ann["label"].lower() == "p":
+            wave = "P"
+        elif ann["label"].lower() == "t":
+            wave = "T"
+        else:
+            continue
+        t_start = ann["start"] / fs
+        t_peak = ann["peak"] / fs
+        t_end = ann["end"] / fs
+        plt.plot(t_peak, signal[ann["peak"]], 'o', color=colors[wave])
+        plt.axvline(t_start, linestyle="--", color=colors[wave])
+        plt.axvline(t_end, linestyle="--", color=colors[wave])
+    plt.xlabel("Time (s)")
+    plt.ylabel("Amplitude")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+
+    plt.figure(figsize=(12, 4))
+    plt.plot(t, signal, label="ECG Signal")
+    plt.fill_between(t, signal.min(), signal.max(), where=mask==1,
+                     color="red", alpha=0.3, label="QRS Mask")
+    for ann in ann_list:
+        if ann["label"] == "N":
+            t_start = ann["start"] / fs
+            t_end = ann["end"] / fs
+            plt.axvline(t_start, linestyle="--", color="red")
+            plt.axvline(t_end, linestyle="--", color="red")
+    plt.xlabel("Time (s)")
+    plt.ylabel("Amplitude")
+    plt.title("ECG with QRS Mask")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
 
 if __name__ == "__main__":
-    main()
+    data_dir = "datasets_physionet/data"
+    record_ids = range(1, 201)
+
+    train_leads = ["ii", "v1", "v4"]
+    val_leads   = ["i", "v2", "v5"]
+    test_leads  = ["iii", "v3", "v6"]
+
+    train_signals, train_masks = [], []
+    val_signals, val_masks = [], []
+    test_signals, test_masks = [], []
+
+    for idx, rec_id in enumerate(record_ids):
+        # Training set
+        for lead in train_leads:
+            sig, mask, ann_list, fs = process_record(data_dir, rec_id, lead)
+            train_signals.append(sig)
+            train_masks.append(mask)
+            if idx < 3:
+                print(f"Train Record {rec_id}, Lead {lead}")
+                plot_record(sig, mask, ann_list, fs)
+
+        # Validation set
+        for lead in val_leads:
+            sig, mask, ann_list, fs = process_record(data_dir, rec_id, lead)
+            val_signals.append(sig)
+            val_masks.append(mask)
+            if idx < 3:
+                print(f"Validation Record {rec_id}, Lead {lead}")
+                plot_record(sig, mask, ann_list, fs)
+
+        # Test set
+        for lead in test_leads:
+            sig, mask, ann_list, fs = process_record(data_dir, rec_id, lead)
+            test_signals.append(sig)
+            test_masks.append(mask)
+            if idx < 3:
+                print(f"Test Record {rec_id}, Lead {lead}")
+                plot_record(sig, mask, ann_list, fs)
+
+    np.save("train_signals.npy", np.array(train_signals, dtype=object), allow_pickle=True)
+    np.save("train_masks.npy",   np.array(train_masks, dtype=object), allow_pickle=True)
+    np.save("val_signals.npy",   np.array(val_signals, dtype=object), allow_pickle=True)
+    np.save("val_masks.npy",     np.array(val_masks, dtype=object), allow_pickle=True)
+    np.save("test_signals.npy",  np.array(test_signals, dtype=object), allow_pickle=True)
+    np.save("test_masks.npy",    np.array(test_masks, dtype=object), allow_pickle=True)
 
