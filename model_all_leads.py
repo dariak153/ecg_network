@@ -169,7 +169,6 @@ class QRSLightning(pl.LightningModule):
             roc_auc = float('nan')
         d = dice_loss(torch.tensor(flat_preds), torch.tensor(flat_masks)).item()
 
-        import pandas as pd
         metrics = {
             "Loss": [avg_loss],
             "Accuracy": [acc],
@@ -260,7 +259,6 @@ class ECGDataset(Dataset):
             signal = np.expand_dims(signal, axis=-1)
         return torch.tensor(signal), torch.tensor(mask)
 
-# Ścieżka do katalogu wyjściowego
 output_dir = "."
 
 train_dataset = ECGDataset(os.path.join(output_dir, "train_signals.npy"),
