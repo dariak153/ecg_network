@@ -1,0 +1,36 @@
+
+
+pluginManagement {
+    // Ustaw ścieżkę do Flutter SDK
+    def flutterSdkPath = {
+        def properties = new Properties()
+        file("local.properties").withInputStream { properties.load(it) }
+        def sdkPath = properties.getProperty("flutter.sdk")
+        assert sdkPath != null, "flutter.sdk not set in local.properties"
+        return sdkPath
+    }()
+    settings.ext.flutterSdkPath = flutterSdkPath
+
+    // Repozytoria dla wtyczek Gradle
+    repositories {
+        gradlePluginPortal()
+        google()
+        mavenCentral()
+        maven { url 'https://storage.googleapis.com/download.flutter.io' }
+    }
+
+    // Rejestracja wtyczki Flutter Gradle
+    plugins {
+        id "dev.flutter.flutter-gradle-plugin" version "1.0.0" apply false
+    }
+
+    // Dołączenie skryptów Fluttera
+    includeBuild("${settings.ext.flutterSdkPath}/packages/flutter_tools/gradle")
+}
+
+// Nazwa projektu i modułów
+rootProject.name = 'tire_flutter_app'
+include ':app'
+
+// Ładowanie skryptu do rejestrowania pluginów aplikacji
+apply from: "${settings.ext.flutterSdkPath}/packages/flutter_tools/gradle/app_plugin_loader.gradle"
