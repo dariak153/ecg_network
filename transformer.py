@@ -1,4 +1,3 @@
-# skript_qrs_transformer_with_mse.py
 import os
 import numpy as np
 import pandas as pd
@@ -12,9 +11,7 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# -----------------------------------------------------------------------------
-# 1) PositionEmbedding
-# -----------------------------------------------------------------------------
+
 class PositionEmbedding(nn.Module):
     def __init__(self, emb_type: str, input_dim: int, max_length: int = 5000, dropout: float = 0.1):
         super().__init__()
@@ -42,10 +39,8 @@ class PositionEmbedding(nn.Module):
             x = x + self.pe(idx)
         return self.dropout(x)
 
-# -----------------------------------------------------------------------------
-# 2) Transformer utils
-# -----------------------------------------------------------------------------
-def generate_square_subsequent_mask(sz, prev=0):
+
+def generate_mask_squaresz, prev=0):
     mask = (torch.triu(torch.ones(sz, sz), -prev) == 1).transpose(0,1)
     mask = mask.float().masked_fill(mask==0, float('-inf')).masked_fill(mask==1, 0.0)
     return mask
@@ -61,9 +56,6 @@ class BatchFirstTransformerEncoderLayer(nn.TransformerEncoderLayer):
         out = super().forward(src, *args, **kwargs)
         return out.transpose(0,1)
 
-# -----------------------------------------------------------------------------
-# 3) TSTransformer
-# -----------------------------------------------------------------------------
 class TSTransformer(nn.Module):
     def __init__(
         self,
@@ -104,7 +96,7 @@ class TSTransformer(nn.Module):
             x = self.pe(x)
         z = self.encoder(x) if self.encoder is not None else x
 
-        mask = generate_square_subsequent_mask(z.size(1), 0).to(z.device)
+        mask = generate_mask_squarez.size(1), 0).to(z.device)
         if self.is_bidir:
             mask = torch.zeros_like(mask)
 
@@ -112,9 +104,7 @@ class TSTransformer(nn.Module):
         out = h[:, -1, :] if self.use_last else h.mean(dim=1)
         return h, out
 
-# -----------------------------------------------------------------------------
-# 4) Metric & loss (BCE + Dice + MSE)
-# -----------------------------------------------------------------------------
+
 def dice_coeff(pred, target, smooth=1e-6):
     p = pred.view(-1); t = target.view(-1)
     inter = (p * t).sum()
@@ -126,9 +116,6 @@ def composite_loss(pred, target, λ_bce=1.0, λ_dice=1.0, λ_mse=1.0):
     mse  = nn.MSELoss()(pred, target)
     return λ_bce * bce + λ_dice * dice + λ_mse * mse
 
-# -----------------------------------------------------------------------------
-# 5) QRSModel + LightningModule
-# -----------------------------------------------------------------------------
 class QRSModel(nn.Module):
     def __init__(self,
         input_size=1,
@@ -249,9 +236,6 @@ class QRSLightning(pl.LightningModule):
         sch = optim.lr_scheduler.ReduceLROnPlateau(opt, mode="min", factor=0.5, patience=10)
         return {"optimizer": opt, "lr_scheduler": {"scheduler": sch, "monitor": "val_loss"}}
 
-# -----------------------------------------------------------------------------
-# 6) Dataset + training/testing
-# -----------------------------------------------------------------------------
 class ECGDataset(Dataset):
     def __init__(self, signals_file, masks_file):
         self.signals = np.load(signals_file, allow_pickle=True)
