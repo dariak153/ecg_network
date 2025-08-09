@@ -28,7 +28,6 @@ def dice_coef(pred, target, smooth=1e-6):
     return (2. * inter + smooth) / (p.sum() + t.sum() + smooth)
 
 
-
 def weighted_binary_cross_entropy(sigmoid_x, targets, pos_weight, weight=None, reduction="mean"):
     loss = -pos_weight * targets * sigmoid_x.log() - (1 - targets) * (1 - sigmoid_x).log()
     if weight is not None:
@@ -176,23 +175,19 @@ class HybridTCNTransformer(pl.LightningModule):
         )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
 
-        # --- head ---
+ 
         self.classifier = nn.Linear(d_model, output_size)
         self.act = nn.Sigmoid() if output_size==1 else None
-
-        # --- loss ---
         self.crit = setup_criterion(crit_name, **crit_kwargs)
 
     def forward(self, x):
-        # x: (B, L, C)
-        # TCN expects (B, C, L)
         x = x.transpose(1,2)
-        x = self.tcn(x)                          # (B, tcn_out_ch, L)
-        x = x.transpose(1,2)                     # (B, L, tcn_out_ch)
-        x = self.linear_proj(x)                  # (B, L, d_model)
+        x = self.tcn(x)                        
+        x = x.transpose(1,2)                   
+        x = self.linear_proj(x)                 
         x = self.pos_enc(x)
-        x = self.transformer(x)                  # (B, L, d_model)
-        x = self.classifier(x)                   # (B, L, output_size)
+        x = self.transformer(x)               
+        x = self.classifier(x)                
         if self.act: x = self.act(x)
         return x
 
@@ -247,8 +242,6 @@ if __name__ == "__main__":
     parser.add_argument('--max_epochs', type=int,   default=50)
     parser.add_argument('--lr',         type=float, default=1e-4)
     parser.add_argument('--thr',        type=float, default=0.5)
-
-    # loss
     parser.add_argument('--crit_name',  type=str, required=True,
                         choices=['nn.MSELoss','WeightedBCELoss','BCEDiceLoss',
                                  'FocalLoss','AsymmetricLoss','MSEProbLoss','TverskyLoss'])
@@ -261,13 +254,13 @@ if __name__ == "__main__":
     parser.add_argument('--alpha',      type=float, default=0.5)
     parser.add_argument('--beta',       type=float, default=0.5)
 
-    # TCN params
+
     parser.add_argument('--tcn_channels',     type=int, nargs='+', default=[256,128,64])
     parser.add_argument('--kernel_size',      type=int, default=4)
     parser.add_argument('--dropout',          type=float, default=0.4)
     parser.add_argument('--causal',           action='store_true')
 
-    # transformer params
+
     parser.add_argument('--d_model',         type=int,   default=64)
     parser.add_argument('--nhead',           type=int,   default=4)
     parser.add_argument('--dim_feedforward', type=int,   default=128)
