@@ -40,7 +40,7 @@ class PositionEmbedding(nn.Module):
         return self.dropout(x)
 
 
-def generate_mask_squaresz, prev=0):
+def generate_mask_square(sz, prev=0):
     mask = (torch.triu(torch.ones(sz, sz), -prev) == 1).transpose(0,1)
     mask = mask.float().masked_fill(mask==0, float('-inf')).masked_fill(mask==1, 0.0)
     return mask
@@ -96,11 +96,12 @@ class TSTransformer(nn.Module):
             x = self.pe(x)
         z = self.encoder(x) if self.encoder is not None else x
 
-        mask = generate_mask_squarez.size(1), 0).to(z.device)
+        mask = generate_mask_square(z.size(1), 0).to(z.device)
         if self.is_bidir:
             mask = torch.zeros_like(mask)
 
-        h = self.temporal_encoder(z, mask)  # (B, T, hidden)
+
+        h = self.temporal_encoder(z, mask)  
         out = h[:, -1, :] if self.use_last else h.mean(dim=1)
         return h, out
 
